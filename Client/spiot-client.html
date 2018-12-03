@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>    
+	<title>ControlThings</title>
+    <meta charset="utf-8">
+    <meta name = "viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel = "icon" href="favicon.ico">
+    <link href = "css/bootstrap.min.css" rel="stylesheet">
+    
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+               IoT Client
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">IoT access through blockchain</h5>
+                <div class="form-group">
+                    <label for="url">IoT resource URL</label>
+                    <input type="text" class="form-control" id="url" value="http://mmlab.edu.gr:9000/simple">
+                </div>
+                <button class="btn btn-default" id="simple-btn">Simple Access</button><br/>
+            </div>
+        </div>
+        <div id="response"></div>
+    </div>
+</body>
+<script>
+    const ABI   = [{"constant":false,"inputs":[{"name":"message","type":"string"}],"name":"echo","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":false,"name":"message","type":"string"}],"name":"NewMessage","type":"event"}];
+    var hasWeb3 = false;
+    
+    window.addEventListener('load', function() {
+        document.getElementById("simple-btn").addEventListener("click", simpleCall);
+        if (typeof web3 !== 'undefined'){
+            hasWeb3 = true;
+        }
+    }); 
+    
+    function simpleCall()
+    {
+        var xhttp = new XMLHttpRequest();
+        var url   = document.getElementById("url").value;
+        xhttp.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                var response    = JSON.parse(this.responseText);
+                document.getElementById("response").innerHTML =  "<br/>Received from Server: " + this.responseText;
+            }
+        };
+        xhttp.open("GET",url, true);
+        xhttp.send();
+    }
+     
+    function invokeContract() {
+        web3             = new Web3(web3.currentProvider);
+        var message      = document.getElementById("message").value;
+        var echoContract = web3.eth.contract(ABI);
+        var echo         = echoContract.at('0xf77d33891855a5ea9abbaf00ebcf13ed577039b1');
+        var newMsgEvent  = echo.NewMessage();
+        newMsgEvent.watch(function(error, result){
+            if (!error)
+            {
+                console.log("New event: " + result.args.message);
+            }else
+            {
+                console.log("Error: " + error); 
+            }
+        });
+        echo.echo(message,function(error, result) { 
+            if (!error)
+            {
+                console.log("Contract function invoked");
+            }else
+            {
+                console.log("Error: " + error); 
+            } 
+            });
+        console.log("Contract invoked");
+        
+    }
+
+</script>
