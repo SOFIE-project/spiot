@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>    
+	<title>Client</title>
+    <meta charset="utf-8">
+    <meta name = "viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link href = "css/bootstrap.min.css" rel="stylesheet">
+    
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+               IoT Client
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">IoT access through blockchain</h5>
+                <div class="form-group">
+                    <label for="url">IoT resource URL</label>
+                    <input type="text" class="form-control" id="url" value="https://blockchain.mmlab.edu.gr/SPIoT/server.php">
+                </div>
+                <button class="btn btn-default" id="straw-btn">Strawman protocol</button>
+                <button class="btn btn-default" id="first-btn">First construction</button>
+                <br/>
+            </div>
+        </div>
+        <div id="response"></div>
+    </div>
+</body>
+<script src="js/ctcore.js"></script>
+<script src="js/conf.js"></script>
+<script src="js/nacl.min.js"></script>
+<script>
+    /*
+     * Keys generated using nacl.box.keyPair() and encoded to Base64
+     * It is not safe to keep your private key in a javascript file!!
+     */
+    const secretKeyBase64 = "SY/gkSXYeoWQT4tsmlsKCYumUujI+aUJQSfma+YyvjY=";
+    const publicKeyBase64 = "OfOxIgTTENIj8uTCIIJ2HVtVq9hUlg8toutsWlj+KQE=";
+
+    var ACPPubKeyBase64;
+    var textEncoder  = new TextEncoder();
+    var hasWeb3 = false;
+    window.addEventListener('load', function() {
+        document.getElementById("straw-btn").addEventListener("click", strawCall);
+        document.getElementById("first-btn").addEventListener("click", firstCall);
+        if (typeof web3 !== 'undefined'){
+            hasWeb3 = true;
+            web3 = new Web3(web3.currentProvider);
+       }
+    }); 
+    
+    function strawCall()
+    {
+        var xhttp = new XMLHttpRequest();
+        var url   = document.getElementById("url").value + "?authtype=1";
+        xhttp.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                console.log ("Received from Server: " + this.responseText);
+                var response    = JSON.parse(this.responseText);
+                ACPPubKeyBase64 = response.ACPPubKeyBase64;
+                invokeContract(response.ACP, response.token, url, publicKeyBase64);
+            }
+        };
+        xhttp.open("GET",url, true);
+        xhttp.send();
+    }
+
+    function firstCall()
+    {
+        var xhttp = new XMLHttpRequest();
+        var url   = document.getElementById("url").value;
+        xhttp.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                console.log ("Received from Server: " + this.responseText);
+                var response    = JSON.parse(this.responseText);
+                hmacToken(response.token,url).then(function(hToken)
+                {
+                    console.log("HMAC of the token: " + arrayBufferToBase64(hToken));
+                }
+                );
+            }
+        };
+        xhttp.open("GET",url+"?authtype=2", true);
+        xhttp.send();
+    }
+
+
+    function finallCall(token, base64EncSessionkEy)
+    {
+        var encSessionKey = base64ToUint8Array(base64EncSessionkEy)
+        var sessionKey    = nacl.box.open(encSessionKey, textEncoder.encode(token), base64ToUint8Array(ACPPubKeyBase64), base64ToUint8Array(secretKeyBase64));     
+        var xhttp = new XMLHttpRequest();
+        var url   = document.getElementById("url").value + "?token=" + encodeURIComponent(token);
+        xhttp.onreadystatechange = function() {
+            if (this.readyState == 4) {
+                ecnryptedResponse64 = this.responseText;
+                console.log ("Received: " + ecnryptedResponse64 );                
+                decryptData(Uint8ArrayToBase64(sessionKey),ecnryptedResponse64).then(function(plaintext){
+                    console.log("Decrypted to: " + arrayBufferToString(plaintext));
+                });
+                 
+            }        
+        };
+        xhttp.open("GET",url, true);
+        xhttp.send();
+
+    }
+     
+    function invokeContract(address, token, URIresource, publicKey) {    
+        var contract     = web3.eth.contract(ABI);
+        var access       = contract.at(address);
+        access.authGrantedEvent().watch(newAuthGrantedEvent);
+        access.authRequestS(token, URIresource, publicKey, {gas: 3000000, value: web3.toWei("2500000", "gwei")},function(error, result) { 
+            if (!error)
+            {
+                console.log("Contract invoked, parameters: " + address + "," + token + ", " + publicKey); 
+            }else
+            {
+                console.log("Error: " + error); 
+            } 
+        });  
+    }
+
+    function newAuthGrantedEvent(error,result)
+    {
+        if (!error)
+        {
+            var token = result.args.token;
+            var URIresource = result.args.URIresource;
+            var base64Esk = result.args.base64Esk;
+            var publicKey = result.args.publicKey;
+            console.log("Authentication granted for " + URIresource + "  to the client with public key " + publicKey  + ", token " + token + ", encrypted session key " + base64Esk); 
+            finallCall(token,base64Esk);         
+        }else{
+            console.log("Event error")
+        }
+    }
+
+</script>
